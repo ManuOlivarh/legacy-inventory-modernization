@@ -1,0 +1,53 @@
+USE ERPDB;
+GO
+
+IF NOT EXISTS (SELECT 1 FROM dbo.INV_BOD)
+INSERT INTO dbo.INV_BOD (BOD_COD, BOD_NOM, BOD_TIP) VALUES
+    ('C001', 'BODEGA CENTRAL', 'C'),
+    ('T001', 'TIENDA CENTRO',  'T'),
+    ('T002', 'TIENDA NORTE',   'T'),
+    ('T003', 'TIENDA SUR',     'T');
+GO
+
+IF NOT EXISTS (SELECT 1 FROM dbo.INV_ART)
+INSERT INTO dbo.INV_ART (ART_COD, ART_DES, ART_CAT, ART_UM, ART_EST) VALUES
+    ('000000010001', 'CAM MC AZ T-M ALG',     'ROP', 'UND', 'A'),
+    ('000000010002', 'BLUS ML RSA T-S POL',   'ROP', 'UND', 'A'),
+    ('000000010003', 'PANT JEAN IND T-32',    'ROP', 'UND', 'A'),
+    ('000000010004', 'CHUM IMP NGR T-L',      'ROP', 'UND', 'A'),
+    ('000000010005', 'CALC DEP NGR T-U PQ3',  'ROP', 'PQT', 'A'),
+    ('000000010006', 'GOR BEIS AZM AJUST',    'ROP', 'UND', 'A'),
+    ('000000020001', 'ZAP DEP BCO N-42',      'CAL', 'PAR', 'A'),
+    ('000000020002', 'SAND PLAY NGR N-38',    'CAL', 'PAR', 'A'),
+    ('000000020003', 'BOT LLUV AMA N-35 INF', 'CAL', 'PAR', 'A'),
+    ('000000030001', 'OLL PRES 6L ACX',       'HOG', 'UND', 'A'),
+    ('000000030002', 'SART ANTIAD 24CM',      'HOG', 'UND', 'A'),
+    ('000000030003', 'TOAL BAN 70X140 BCO',   'HOG', 'UND', 'A'),
+    ('000000030004', 'MOCH ESC 20L GRS',      'HOG', 'UND', 'A'),
+    ('000000040001', 'LICU 10V 600W NGR',     'ELE', 'UND', 'A'),
+    ('000000040002', 'PLANCH VAP 1200W',      'ELE', 'UND', 'A'),
+    ('000000040003', 'VENT PED 16IN 3VEL',    'ELE', 'UND', 'A'),
+    ('000000040004', 'FOCO LED 9W LUZ CAL',   'ELE', 'UND', 'A'),
+    ('000000040005', 'EXT ELEC 6T 3M',        'ELE', 'UND', 'A'),
+    ('000000050001', 'DET LIQ 3L LAV',        'LIM', 'UND', 'A'),
+    ('000000050002', 'CLORO 1GL',             'LIM', 'UND', 'A'),
+    ('000000060001', 'PAP HIG 4R DH',         'HIG', 'PQT', 'A'),
+    ('000000060002', 'SHAMP ANTIC 400ML',     'HIG', 'UND', 'A'),
+    ('000000060003', 'CREM DENT 100ML TRIP',  'HIG', 'UND', 'A'),
+    ('000000070001', 'ARZ BCO 2LB',           'ABA', 'BOL', 'A'),
+    ('000000070002', 'FRIJ NGR 2LB BOLS',     'ABA', 'BOL', 'A'),
+    ('000000070003', 'ACEIT VEG 1L',          'ABA', 'UND', 'A'),
+    ('000000070004', 'CAF MOL 400G OSC',      'ABA', 'UND', 'A'),
+    ('000000070005', 'AZUC BCA 5LB',          'ABA', 'BOL', 'A'),
+    ('000000070006', 'ATUN AG 140G LAT',      'ABA', 'UND', 'A'),
+    ('000000070007', 'GALL SOD 8PQ',          'ABA', 'PQT', 'A');
+GO
+
+IF NOT EXISTS (SELECT 1 FROM dbo.INV_STK)
+INSERT INTO dbo.INV_STK (ART_COD, BOD_COD, STK_EXI)
+SELECT a.ART_COD,
+       b.BOD_COD,
+       CASE b.BOD_TIP WHEN 'C' THEN 200 ELSE 20 + ABS(CHECKSUM(NEWID())) % 21 END
+  FROM dbo.INV_ART a
+ CROSS JOIN dbo.INV_BOD b;
+GO

@@ -21,6 +21,7 @@
 
     <modules>
         <!-- Services are added milestone by milestone; see docs/design.md. -->
+        <module>erp-simulator</module>
     </modules>
 
     <properties>

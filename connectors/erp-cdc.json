@@ -1,0 +1,30 @@
+{
+  "connector.class": "io.debezium.connector.sqlserver.SqlServerConnector",
+  "tasks.max": "1",
+
+  "database.hostname": "sqlserver",
+  "database.port": "1433",
+  "database.user": "debezium",
+  "database.password": "${env:DEBEZIUM_PASSWORD}",
+  "database.names": "ERPDB",
+  "database.encrypt": "true",
+  "database.trustServerCertificate": "true",
+
+  "topic.prefix": "erp.raw",
+  "table.include.list": "dbo.INV_ART,dbo.INV_STK,dbo.INV_MOV",
+  "snapshot.mode": "initial",
+  "decimal.handling.mode": "string",
+
+  "schema.history.internal.kafka.bootstrap.servers": "kafka-1:29092,kafka-2:29092,kafka-3:29092",
+  "schema.history.internal.kafka.topic": "erp.raw.schema-history",
+
+  "topic.creation.default.replication.factor": "3",
+  "topic.creation.default.partitions": "3",
+  "topic.creation.default.cleanup.policy": "delete",
+  "topic.creation.default.retention.ms": "604800000",
+
+  "key.converter": "org.apache.kafka.connect.json.JsonConverter",
+  "key.converter.schemas.enable": "false",
+  "value.converter": "org.apache.kafka.connect.json.JsonConverter",
+  "value.converter.schemas.enable": "false"
+}

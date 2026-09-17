@@ -17,6 +17,40 @@ and the strangler fig pattern, and tested against infrastructure failures.
 With [SDKMAN](https://sdkman.io), run `sdk env install` in the repo root. It
 reads the pinned JDK from `.sdkmanrc`, the same file CI uses.
 
+## Run it
+
+```bash
+docker compose up -d --build
+```
+
+That starts a three-node Kafka cluster, Schema Registry, SQL Server with the
+legacy ERP schema and seed data, Kafka Connect with the Debezium CDC connector,
+and a simulator writing stock movements. First start takes a few minutes while
+images download and SQL Server initialises.
+
+Watch change events arriving from the ERP:
+
+```bash
+docker compose exec kafka-1 /opt/kafka/bin/kafka-console-consumer.sh \
+  --bootstrap-server localhost:29092 \
+  --topic erp.raw.ERPDB.dbo.INV_MOV --from-beginning --max-messages 5
+```
+
+Check the connector:
+
+```bash
+curl -s localhost:8083/connectors/erp-cdc/status
+```
+
+Stop everything, discarding all data:
+
+```bash
+docker compose down -v
+```
+
+Roughly 6 GB of RAM while running. See [docs/legacy-erp.md](docs/legacy-erp.md)
+for how to read the legacy schema.
+
 ## Build
 
 ```bash

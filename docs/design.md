@@ -134,9 +134,14 @@ reconciliation drift.
 
 ### Topics and contracts
 
+Raw CDC topics carry JSON without schemas: they are internal, nobody outside
+the two translating services may read them, and Avro there would mean bolting
+third-party converters onto the Debezium image for no gain. The Avro contracts
+start with the domain events.
+
 | Topic | Key | Cleanup | Contract |
 |---|---|---|---|
-| `erp.raw.dbo.INV_MOV`, `erp.raw.dbo.INV_STK`, `erp.raw.dbo.INV_ART` | table PK | delete, 7d | Internal, no guarantees |
+| `erp.raw.ERPDB.dbo.INV_MOV`, `…INV_STK`, `…INV_ART` | table PK | delete, 7d | Internal, JSON, no guarantees |
 | `inventory.stock-movements.v1` | `sku:location` | delete, 30d | Public, Avro, BACKWARD |
 | `inventory.stock-levels.v1` | `sku:location` | compact | Public, Avro, BACKWARD |
 | `orders.reservations.v1` | `sku:location` | delete, 30d | Public, Avro, BACKWARD |

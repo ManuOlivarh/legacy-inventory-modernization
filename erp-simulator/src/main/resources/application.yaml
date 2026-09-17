@@ -1,0 +1,13 @@
+spring:
+  application:
+    name: erp-simulator
+  main:
+    web-application-type: none
+  # Local defaults for running outside Compose; Compose overrides them via SPRING_DATASOURCE_*.
+  datasource:
+    url: jdbc:sqlserver://localhost:1433;databaseName=ERPDB;encrypt=true;trustServerCertificate=true
+    username: erp_app
+    password: Sim_Writer_2026!
+
+simulator:
+  movements-per-second: 5
