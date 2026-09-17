@@ -1,0 +1,30 @@
+spring:
+  application:
+    name: inventory-translator
+  main:
+    web-application-type: none
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    properties:
+      schema.registry.url: ${SCHEMA_REGISTRY_URL:http://localhost:8081}
+    streams:
+      application-id: inventory-translator
+      properties:
+        # Reads, state and writes commit together: a crash mid-batch cannot
+        # duplicate or lose a translated event (failure scenario F2).
+        processing.guarantee: exactly_once_v2
+        replication.factor: 3
+        min.insync.replicas: 2
+        num.standby.replicas: 0
+
+translator:
+  movements-input-topic: erp.raw.ERPDB.dbo.INV_MOV
+  stock-input-topic: erp.raw.ERPDB.dbo.INV_STK
+  movements-output-topic: inventory.stock-movements.v1
+  stock-levels-output-topic: inventory.stock-levels.v1
+  # The ERP writes DATETIME without a zone; this is the zone it means.
+  legacy-timezone: America/Guatemala
+
+logging:
+  level:
+    org.apache.kafka.streams: INFO

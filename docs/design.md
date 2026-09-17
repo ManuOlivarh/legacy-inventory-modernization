@@ -1,6 +1,6 @@
 # Design — Legacy Inventory Modernization
 
-> Status: **approved 2026-09-17**. Milestone 1 in progress.
+> Status: **approved 2026-09-17**. Milestones 1 and 2 done; milestone 3 next.
 
 ## The problem this project solves
 
@@ -83,10 +83,22 @@ contract**. Only the two translating services (inventory-translator and
 catalog-enricher) may consume them.
 
 **inventory-translator (Kafka Streams).** This is the anti-corruption layer. It
-maps raw rows to domain events (`StockMoved`, with SKU, location, quantity,
-reason, and source timestamp) and keeps an `available = on_hand − reserved`
-table keyed by `sku:location`. It uses `exactly_once_v2`, so reads, state
-updates, and writes commit together inside Kafka.
+maps raw rows to domain events keyed by `sku:location`: `StockMoved`, with the
+sign moved out of the movement type and into the quantity, and
+`StockLevelChanged`, with `available = on_hand − reserved` and the source LSN
+consumers use to reject stale updates. Legacy quirks are handled here and
+nowhere else: padded `CHAR` codes, exact decimals, and `DATETIME` values that
+carry local wall-clock time with no zone. It runs with `exactly_once_v2`, so
+reads, state updates and writes commit together inside Kafka.
+
+Stock levels come from the ERP's own `INV_STK` rows, which are absolute values,
+not from summing movements. Summing would look more impressive and would drift
+permanently after a single missed or replayed event; absolute values from the
+system of record are self-correcting.
+
+Contracts are files in `contracts/`, published to Schema Registry by a
+deliberate step with `BACKWARD` compatibility. Services run with
+`auto.register.schemas=false`, so no service can invent a contract at runtime.
 
 **reservation-service (Spring Boot, the strangler step).** Owns online
 reservations that used to live in the ERP. It writes the reservation and an

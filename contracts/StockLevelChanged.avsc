@@ -1,0 +1,15 @@
+{
+  "namespace": "dev.joseherrera.inventory.events",
+  "type": "record",
+  "name": "StockLevelChanged",
+  "doc": "Absolute stock for one SKU at one location, as the ERP currently holds it.",
+  "fields": [
+    { "name": "sku", "type": "string" },
+    { "name": "location", "type": "string" },
+    { "name": "onHand", "type": { "type": "bytes", "logicalType": "decimal", "precision": 12, "scale": 2 } },
+    { "name": "reserved", "type": { "type": "bytes", "logicalType": "decimal", "precision": 12, "scale": 2 } },
+    { "name": "available", "type": { "type": "bytes", "logicalType": "decimal", "precision": 12, "scale": 2 }, "doc": "onHand - reserved" },
+    { "name": "changedAt", "type": { "type": "long", "logicalType": "timestamp-millis" } },
+    { "name": "sourceLsn", "type": "string", "doc": "SQL Server log sequence number; consumers use it to reject stale updates" }
+  ]
+}

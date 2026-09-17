@@ -49,7 +49,12 @@ The abbreviations are Spanish, as in many Latin American ERPs of that era.
 3. **Decimals for whole units.** `decimal.handling.mode=string` in the
    connector keeps the exact value instead of a lossy double.
 4. **Fixed-width codes.** `CHAR` columns arrive padded; the translator trims.
-5. **No timezone.** Timestamps are local. Domain events carry UTC instants.
+5. **No timezone.** The ERP server runs in local time and `DATETIME` stores no
+   zone. Debezium sends those values as milliseconds since epoch *read as if
+   they were UTC*, so the wall-clock reading is right and the instant is wrong
+   by the offset. The translator reinterprets them in `America/Guatemala`.
+   `DATETIME2` columns would arrive in microseconds instead, which is the kind
+   of detail that silently shifts data by a factor of a thousand.
 
 ## Write path
 

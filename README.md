@@ -36,6 +36,20 @@ docker compose exec kafka-1 /opt/kafka/bin/kafka-console-consumer.sh \
   --topic erp.raw.ERPDB.dbo.INV_MOV --from-beginning --max-messages 5
 ```
 
+See the translated domain events, in Avro:
+
+```bash
+docker compose run --rm --no-deps schema-registry kafka-avro-console-consumer \
+  --bootstrap-server kafka-1:29092 \
+  --property schema.registry.url=http://schema-registry:8081 \
+  --topic inventory.stock-levels.v1 --from-beginning --max-messages 5 \
+  --property print.key=true \
+  --property key.deserializer=org.apache.kafka.common.serialization.StringDeserializer
+```
+
+Quantities print as raw bytes there because they are Avro `decimal`, which keeps
+the exact value the ERP holds; a real consumer reads them as `BigDecimal`.
+
 Check the connector:
 
 ```bash

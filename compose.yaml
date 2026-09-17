@@ -81,7 +81,8 @@ services:
       SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: kafka-1:29092,kafka-2:29092,kafka-3:29092
       SCHEMA_REGISTRY_HEAP_OPTS: -Xms256m -Xmx256m
     healthcheck:
-      test: ["CMD-SHELL", "curl -fs http://localhost:8081/subjects > /dev/null"]
+      # The image ships no curl, so the check uses the Python it does ship.
+      test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:8081/subjects', timeout=5)\""]
       interval: 10s
       timeout: 5s
       retries: 12
@@ -96,6 +97,10 @@ services:
       <<: *credentials
       ACCEPT_EULA: "Y"
       MSSQL_PID: Developer
+      # The ERP server runs in the retailer's local time, as legacy servers do.
+      # Everything downstream stays in UTC, which is exactly the trap the
+      # translator has to handle.
+      TZ: America/Guatemala
       MSSQL_AGENT_ENABLED: "true"   # CDC capture jobs run on SQL Server Agent
       MSSQL_MEMORY_LIMIT_MB: 2048
     healthcheck:
@@ -162,6 +167,42 @@ services:
         --data @/connectors/erp-cdc.json
         http://connect:8083/connectors/erp-cdc/config && echo
     restart: "no"
+
+  # One-shot: creates the domain topics with explicit settings.
+  kafka-init:
+    image: apache/kafka:${KAFKA_VERSION:-4.3.1}
+    depends_on:
+      kafka-1: { condition: service_healthy }
+      kafka-2: { condition: service_healthy }
+      kafka-3: { condition: service_healthy }
+    volumes:
+      - ./topics:/topics:ro
+    entrypoint: ["bash", "/topics/create.sh"]
+    restart: "no"
+
+  # One-shot: publishes the Avro contracts and pins their compatibility.
+  schema-init:
+    image: confluentinc/cp-schema-registry:${SCHEMA_REGISTRY_VERSION:-8.3.2}
+    depends_on:
+      schema-registry: { condition: service_healthy }
+    volumes:
+      - ./contracts:/contracts:ro
+    entrypoint: ["python3", "/contracts/register.py", "http://schema-registry:8081"]
+    restart: "no"
+
+  inventory-translator:
+    build:
+      context: .
+      dockerfile: inventory-translator/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      kafka-init: { condition: service_completed_successfully }
+      schema-init: { condition: service_completed_successfully }
+      connect-init: { condition: service_completed_successfully }
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka-1:29092,kafka-2:29092,kafka-3:29092
+      SCHEMA_REGISTRY_URL: http://schema-registry:8081
+      JAVA_TOOL_OPTIONS: -XX:MaxRAMPercentage=75
 
   erp-simulator:
     build:

@@ -1,0 +1,27 @@
+{
+  "namespace": "dev.joseherrera.inventory.events",
+  "type": "record",
+  "name": "StockMoved",
+  "doc": "A stock movement recorded by the legacy ERP, translated into domain terms.",
+  "fields": [
+    { "name": "movementId", "type": "long", "doc": "INV_MOV.MOV_NUM; stable identifier for deduplication" },
+    { "name": "sku", "type": "string" },
+    { "name": "location", "type": "string" },
+    {
+      "name": "quantity",
+      "type": { "type": "bytes", "logicalType": "decimal", "precision": 12, "scale": 2 },
+      "doc": "Signed: negative for sales and downward adjustments"
+    },
+    {
+      "name": "reason",
+      "type": {
+        "type": "enum",
+        "name": "MovementReason",
+        "symbols": ["SALE", "RETURN", "RECEIPT", "ADJUSTMENT_IN", "ADJUSTMENT_OUT"]
+      }
+    },
+    { "name": "occurredAt", "type": { "type": "long", "logicalType": "timestamp-millis" }, "doc": "ERP local time converted to UTC" },
+    { "name": "capturedAt", "type": { "type": "long", "logicalType": "timestamp-millis" }, "doc": "When CDC read the change" },
+    { "name": "reference", "type": ["null", "string"], "default": null }
+  ]
+}
