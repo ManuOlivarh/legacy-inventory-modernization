@@ -1,12 +1,18 @@
 package dev.joseherrera.inventory.translator;
 
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
 
+import org.apache.kafka.common.header.internals.RecordHeaders;
 import org.apache.kafka.common.serialization.Serde;
 import org.apache.kafka.common.serialization.Serdes;
 import org.apache.kafka.streams.StreamsBuilder;
+import org.apache.kafka.streams.kstream.Branched;
 import org.apache.kafka.streams.kstream.Consumed;
 import org.apache.kafka.streams.kstream.Produced;
+import org.apache.kafka.streams.processor.api.FixedKeyProcessor;
+import org.apache.kafka.streams.processor.api.FixedKeyProcessorContext;
+import org.apache.kafka.streams.processor.api.FixedKeyRecord;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Bean;
@@ -25,6 +31,9 @@ import dev.joseherrera.inventory.events.StockMoved;
 class TranslationTopology {
 
     private static final Logger log = LoggerFactory.getLogger(TranslationTopology.class);
+
+    /** Why a record was dead-lettered; the payload itself is the untouched raw change event. */
+    static final String DLQ_REASON_HEADER = "dlq.reason";
 
     private final TranslatorProperties properties;
     private final Serde<JsonNode> changeEventSerde;
@@ -48,12 +57,20 @@ class TranslationTopology {
         return new Object();
     }
 
+    // A movement type nobody has seen before is a data problem, not a reason to stop
+    // the pipeline. It goes to the dead-letter topic inside the same EOS transaction,
+    // so it is neither lost nor published as a domain event.
     private void movements(StreamsBuilder builder) {
         builder.stream(properties.movementsInputTopic(), Consumed.with(Serdes.String(), changeEventSerde))
                 .filter((key, change) -> isInsertOrUpdate(change))
-                .map((key, change) -> toStockMoved(change.get("after"), change))
-                .filter((key, event) -> event != null)
-                .to(properties.movementsOutputTopic(), Produced.with(Serdes.String(), stockMovedSerde));
+                .split()
+                .branch((key, change) -> MovementReasons.isKnown(LegacyRow.text(change.get("after"), "MOV_TIP")),
+                        Branched.withConsumer(known -> known
+                                .map((key, change) -> toStockMoved(change.get("after"), change))
+                                .to(properties.movementsOutputTopic(), Produced.with(Serdes.String(), stockMovedSerde))))
+                .defaultBranch(Branched.withConsumer(unknown -> unknown
+                        .processValues(() -> new DeadLetterReason("unknown legacy movement type"))
+                        .to(properties.deadLetterTopic(), Produced.with(Serdes.String(), changeEventSerde))));
     }
 
     private void stockLevels(StreamsBuilder builder) {
@@ -78,25 +95,18 @@ class TranslationTopology {
         String sku = LegacyRow.text(row, "ART_COD");
         String location = LegacyRow.text(row, "BOD_COD");
         String legacyType = LegacyRow.text(row, "MOV_TIP");
-        try {
-            MovementReasons type = MovementReasons.of(legacyType);
-            StockMoved event = StockMoved.newBuilder()
-                    .setMovementId(LegacyRow.number(row, "MOV_NUM"))
-                    .setSku(sku)
-                    .setLocation(location)
-                    .setQuantity(type.signed(LegacyRow.decimal(row, "MOV_CAN")))
-                    .setReason(type.reason())
-                    .setOccurredAt(LegacyRow.timestamp(row, "MOV_FEC", properties.legacyTimezone()))
-                    .setCapturedAt(capturedAt(change))
-                    .setReference(LegacyRow.text(row, "MOV_REF"))
-                    .build();
-            return org.apache.kafka.streams.KeyValue.pair(key(sku, location), event);
-        } catch (IllegalArgumentException e) {
-            // A movement type nobody has seen before is a data problem, not a reason to
-            // stop the pipeline. Milestone 3 routes these to a dead-letter topic.
-            log.warn("Skipping movement {}: {}", LegacyRow.number(row, "MOV_NUM"), e.getMessage());
-            return org.apache.kafka.streams.KeyValue.pair(key(sku, location), null);
-        }
+        MovementReasons type = MovementReasons.of(legacyType);
+        StockMoved event = StockMoved.newBuilder()
+                .setMovementId(LegacyRow.number(row, "MOV_NUM"))
+                .setSku(sku)
+                .setLocation(location)
+                .setQuantity(type.signed(LegacyRow.decimal(row, "MOV_CAN")))
+                .setReason(type.reason())
+                .setOccurredAt(LegacyRow.timestamp(row, "MOV_FEC", properties.legacyTimezone()))
+                .setCapturedAt(capturedAt(change))
+                .setReference(LegacyRow.text(row, "MOV_REF"))
+                .build();
+        return org.apache.kafka.streams.KeyValue.pair(key(sku, location), event);
     }
 
     private org.apache.kafka.streams.KeyValue<String, StockLevelChanged> toStockLevel(JsonNode row, JsonNode change) {
@@ -127,5 +137,30 @@ class TranslationTopology {
      */
     private static String key(String sku, String location) {
         return sku + ":" + location;
+    }
+
+    private static final class DeadLetterReason implements FixedKeyProcessor<String, JsonNode, JsonNode> {
+
+        private final String reason;
+        private FixedKeyProcessorContext<String, JsonNode> context;
+
+        DeadLetterReason(String reason) {
+            this.reason = reason;
+        }
+
+        @Override
+        public void init(FixedKeyProcessorContext<String, JsonNode> context) {
+            this.context = context;
+        }
+
+        @Override
+        public void process(FixedKeyRecord<String, JsonNode> record) {
+            String type = LegacyRow.text(record.value().get("after"), "MOV_TIP");
+            log.warn("Dead-lettering movement {}: {} '{}'",
+                    LegacyRow.number(record.value().get("after"), "MOV_NUM"), reason, type);
+            var headers = new RecordHeaders(record.headers().toArray())
+                    .add(DLQ_REASON_HEADER, (reason + ": " + type).getBytes(StandardCharsets.UTF_8));
+            context.forward(record.withHeaders(headers));
+        }
     }
 }

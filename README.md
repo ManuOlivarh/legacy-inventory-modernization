@@ -5,9 +5,10 @@ SQL Server ERP that cannot be changed, built with Change Data Capture, Kafka
 and the strangler fig pattern, and tested against infrastructure failures.
 
 The design is in [docs/design.md](docs/design.md) and each decision has a
-record in [docs/adr](docs/adr). Today the system captures ERP changes and
-publishes them as versioned domain events; the read model, reconciliation and
-failure drills follow the milestones in the design.
+record in [docs/adr](docs/adr). Today the system captures ERP changes,
+publishes them as versioned domain events and serves availability from an
+idempotent read model; reconciliation and failure drills follow the
+milestones in the design.
 
 ## Requirements
 
@@ -27,7 +28,8 @@ docker compose up -d --build
 
 That starts a three-node Kafka cluster, Schema Registry, SQL Server with the
 legacy ERP schema and seed data, Kafka Connect with the Debezium CDC connector,
-and a simulator writing stock movements. First start takes a few minutes while
+a simulator writing stock movements, the translator, and the availability API
+with its Postgres read model. First start takes a few minutes while
 images download and SQL Server initialises.
 
 Watch change events arriving from the ERP:
@@ -51,6 +53,19 @@ docker compose run --rm --no-deps schema-registry kafka-avro-console-consumer \
 
 Quantities print as raw bytes there because they are Avro `decimal`, which keeps
 the exact value the ERP holds; a real consumer reads them as `BigDecimal`.
+
+Ask for availability, served from the read model with the ERP time of the
+value (`asOf`):
+
+```bash
+curl -s localhost:8080/availability/000000010001
+```
+
+Freshness against its SLO, as a Prometheus histogram:
+
+```bash
+curl -s localhost:8080/actuator/prometheus | grep inventory_freshness
+```
 
 Check the connector:
 

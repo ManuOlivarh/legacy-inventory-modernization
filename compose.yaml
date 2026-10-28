@@ -216,3 +216,36 @@ services:
       SPRING_DATASOURCE_USERNAME: erp_app
       SPRING_DATASOURCE_PASSWORD: ${ERP_APP_PASSWORD:-Sim_Writer_2026!}
       SIMULATOR_MOVEMENTS_PER_SECOND: ${SIMULATOR_MOVEMENTS_PER_SECOND:-5}
+
+  # The read model's own database. Nothing else writes to it. Its password is not
+  # in x-credentials: changing that block recreates SQL Server (see ADR 001).
+  availability-db:
+    image: postgres:${POSTGRES_VERSION:-18.1-alpine}
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: availability
+      POSTGRES_USER: availability
+      POSTGRES_PASSWORD: ${AVAILABILITY_DB_PASSWORD:-Availability_2026!}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U availability -d availability"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  availability-api:
+    build:
+      context: .
+      dockerfile: availability-api/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      availability-db: { condition: service_healthy }
+      kafka-init: { condition: service_completed_successfully }
+      schema-init: { condition: service_completed_successfully }
+    ports: ["8080:8080"]
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka-1:29092,kafka-2:29092,kafka-3:29092
+      SCHEMA_REGISTRY_URL: http://schema-registry:8081
+      SPRING_DATASOURCE_URL: jdbc:postgresql://availability-db:5432/availability?socketTimeout=10
+      SPRING_DATASOURCE_USERNAME: availability
+      SPRING_DATASOURCE_PASSWORD: ${AVAILABILITY_DB_PASSWORD:-Availability_2026!}
+      JAVA_TOOL_OPTIONS: -XX:MaxRAMPercentage=75

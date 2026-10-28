@@ -22,6 +22,7 @@ translator:
   stock-input-topic: erp.raw.ERPDB.dbo.INV_STK
   movements-output-topic: inventory.stock-movements.v1
   stock-levels-output-topic: inventory.stock-levels.v1
+  dead-letter-topic: inventory.translator.dlq
   # The ERP writes DATETIME without a zone; this is the zone it means.
   legacy-timezone: America/Guatemala
 

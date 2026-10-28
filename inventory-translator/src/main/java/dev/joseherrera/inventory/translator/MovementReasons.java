@@ -21,6 +21,15 @@ enum MovementReasons {
         this.sign = sign;
     }
 
+    static boolean isKnown(String legacyCode) {
+        for (MovementReasons value : values()) {
+            if (value.name().equals(legacyCode)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     static MovementReasons of(String legacyCode) {
         try {
             return valueOf(legacyCode);

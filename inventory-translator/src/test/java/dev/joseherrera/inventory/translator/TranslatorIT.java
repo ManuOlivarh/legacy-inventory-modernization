@@ -206,7 +206,7 @@ class TranslatorIT {
         try (var admin = Admin.create(Map.<String, Object>of(
                 AdminClientConfig.BOOTSTRAP_SERVERS_CONFIG, kafka.getBootstrapServers()))) {
             List<NewTopic> topics = new ArrayList<>();
-            for (String name : List.of(MOVEMENTS_IN, STOCK_IN, MOVEMENTS_OUT)) {
+            for (String name : List.of(MOVEMENTS_IN, STOCK_IN, MOVEMENTS_OUT, "inventory.translator.dlq")) {
                 topics.add(new NewTopic(name, 3, (short) 1));
             }
             topics.add(new NewTopic(LEVELS_OUT, 3, (short) 1).configs(Map.of("cleanup.policy", "compact")));

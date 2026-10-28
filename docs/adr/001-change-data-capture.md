@@ -50,6 +50,27 @@ not set it. So:
   during the gap are lost as individual events; stock levels are still
   correct because they are absolute values, not sums.
 
+## Found in practice: offsets that outlive the database
+
+On 2026-10-28 a Compose change recreated the SQL Server container, which has
+no volume, so the ERP started again from an empty log. Kafka and Connect kept
+their data, including the stored offset: LSN `000000e0:…` from the old
+database. The new database was at `0000002e:…`.
+
+Debezium then **skipped every change while reporting the connector as
+`RUNNING`**: it waits for the log to pass the stored LSN. The simulator kept
+writing, the raw topics stopped growing, and nothing failed. Only the
+freshness histogram, with no new observations, gave it away.
+
+The same thing happens in production when the source database is restored
+from a backup or failed over to a replica with an older log. Mitigations:
+
+- Freshness alert on "no new observations", not only on slow ones.
+- Reconciliation (milestone 4) catches the resulting drift whatever the cause.
+- A start-up check that the stored LSN is not ahead of `sys.fn_cdc_get_max_lsn()`
+  turns a silent stall into a loud failure. To be decided with the failure drills.
+- Recovery: delete the connector's offsets and take a new snapshot.
+
 ## Consequences
 
 - Duplicates are normal, not a fault. Idempotent consumers are a

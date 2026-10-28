@@ -23,6 +23,7 @@
         <!-- Services are added milestone by milestone; see docs/design.md. -->
         <module>erp-simulator</module>
         <module>inventory-translator</module>
+        <module>availability-api</module>
     </modules>
 
     <properties>

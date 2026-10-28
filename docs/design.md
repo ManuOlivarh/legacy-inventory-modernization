@@ -1,6 +1,6 @@
 # Design — Legacy Inventory Modernization
 
-> Status: **approved 2026-09-17**. Milestones 1 and 2 done; milestone 3 next.
+> Status: **approved 2026-09-17**, amended by the ADRs in [adr/](adr/). Milestones 1–3 done; milestone 4 next.
 
 ## The problem this project solves
 
@@ -56,7 +56,7 @@ flowchart LR
 
   LVL --> API[availability-api]
   API --> PDB[(Postgres projection)]
-  API -. retry / DLQ .-> DLQ[[*.retry / *.dlq]]
+  API -. poison .-> DLQ[[*.dlq]]
 
   REC[reconciler] --> ERP
   REC --> PDB
@@ -103,10 +103,12 @@ owners. Migration phases move a growing share of SKUs to the new service;
 rollback moves them back. See [ADR 003](adr/003-strangler-routing-by-sku.md).
 
 **availability-api (Spring Boot).** Consumes `stock-levels` into a Postgres
-read model and serves `GET /availability/{sku}`. The consumer is idempotent:
-each upsert is conditional on the event's version, so replays and duplicates
-are no-ops. Transient failures go through retry topics. Anything still failing
-goes to a DLQ with the original headers.
+read model and serves `GET /availability/{sku}` with an `asOf` time, so
+clients can see how fresh the answer is. The consumer is idempotent: each
+upsert is conditional on the event's source LSN, so replays and duplicates
+are no-ops. Poison goes to a DLQ byte for byte; a database outage stalls the
+consumer instead, and lag grows until it is over. No retry topics. See
+[ADR 005](adr/005-availability-read-model.md).
 
 **reconciler.** Every N minutes it compares ERP stock with the projection per
 SKU, publishes a drift metric, and alerts when drift is non-zero past a grace
@@ -129,7 +131,7 @@ start with the domain events.
 | `inventory.stock-movements.v1` | `sku:location` | delete, 30d | Public, Avro, BACKWARD |
 | `inventory.stock-levels.v1` | `sku:location` | compact | Public, Avro, BACKWARD |
 | `orders.reservations.v1` | `sku:location` | delete, 30d | Public, Avro, BACKWARD |
-| `*.retry-N`, `*.dlq` | original | delete, 14d | Operational |
+| `inventory.translator.dlq`, `inventory.stock-levels.v1.availability-api.dlq` | original | delete, 14d | Operational, original bytes plus failure headers |
 
 Keying by `sku:location` keeps all events for one stock position on one
 partition, in order. That is the only ordering the domain needs.
@@ -194,16 +196,17 @@ Apple Silicon it runs under Rosetta emulation (enable it in Docker Desktop),
 which works but is slower. Compose files avoid host networking and absolute
 host paths, which don't behave the same on macOS and Windows.
 
-## Milestones (8–10 h/week, 6 weeks)
+## Milestones (8–10 h/week, 7 weeks)
 
 | Week | Deliverable | Done when |
 |---|---|---|
 | 1 | Repo bootstrap, Compose stack, legacy schema + simulator, Debezium streaming raw CDC | `docker compose up` then movements appear in `erp.raw.*` |
 | 2 | Translator with Avro contracts, EOS, stock-levels table | Testcontainers test: Debezium change events → committed Avro events on a real broker and registry |
-| 3 | availability-api projection, idempotency, retry/DLQ, reconciler | F4 passes; drift metric exported |
-| 4 | reservation-service, outbox, SKU ownership routing | F7 passes |
-| 5 | Grafana dashboards, alert rules, F1–F6 scripted with results | Results table generated from runs |
-| 6 | README case study, ADRs, diagrams, recording; page on joseherrera.dev | A client can understand it in 3 minutes |
+| 3 | availability-api projection, idempotency, DLQ, freshness SLO | F4 passes; first version of F6; freshness exported |
+| 4 | Reconciler | Drift metric exported; injected drift is detected and reported |
+| 5 | reservation-service, outbox, SKU ownership routing | F7 passes |
+| 6 | Grafana dashboards, alert rules, F1–F6 scripted with results | Results table generated from runs |
+| 7 | README case study, ADRs, diagrams, recording; page on joseherrera.dev | A client can understand it in 3 minutes |
 
 ## Open decisions
 

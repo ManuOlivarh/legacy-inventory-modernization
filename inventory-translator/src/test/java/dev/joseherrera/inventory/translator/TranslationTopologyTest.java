@@ -44,6 +44,7 @@ class TranslationTopologyTest {
             "erp.raw.ERPDB.dbo.INV_STK",
             "inventory.stock-movements.v1",
             "inventory.stock-levels.v1",
+            "inventory.translator.dlq",
             GUATEMALA);
 
     private final ObjectMapper json = new ObjectMapper();
@@ -53,6 +54,7 @@ class TranslationTopologyTest {
     private TestInputTopic<String, JsonNode> stockIn;
     private TestOutputTopic<String, StockMoved> movementsOut;
     private TestOutputTopic<String, StockLevelChanged> levelsOut;
+    private TestOutputTopic<String, JsonNode> deadLetters;
 
     @BeforeEach
     void setUp() {
@@ -76,6 +78,8 @@ class TranslationTopologyTest {
                 Serdes.String().deserializer(), movedSerde.deserializer());
         levelsOut = driver.createOutputTopic(PROPERTIES.stockLevelsOutputTopic(),
                 Serdes.String().deserializer(), levelSerde.deserializer());
+        deadLetters = driver.createOutputTopic(PROPERTIES.deadLetterTopic(),
+                Serdes.String().deserializer(), changeEvents.deserializer());
     }
 
     @AfterEach
@@ -121,11 +125,17 @@ class TranslationTopologyTest {
     }
 
     @Test
-    void unknownMovementTypesAreSkippedInsteadOfStoppingThePipeline() {
-        movementsIn.pipeInput(null, movement("XX", "1.00"));
+    void unknownMovementTypesAreDeadLetteredInsteadOfStoppingThePipeline() {
+        var unknown = movement("XX", "1.00");
+        movementsIn.pipeInput("{\"MOV_NUM\":7}", unknown);
         movementsIn.pipeInput(null, movement("VT", "1.00"));
 
         assertThat(movementsOut.readValuesToList()).hasSize(1);
+        var deadLetter = deadLetters.readRecord();
+        assertThat(deadLetter.key()).isEqualTo("{\"MOV_NUM\":7}");
+        assertThat(deadLetter.value().toString()).isEqualTo(unknown.toString());
+        assertThat(new String(deadLetter.headers().lastHeader(TranslationTopology.DLQ_REASON_HEADER).value(),
+                java.nio.charset.StandardCharsets.UTF_8)).isEqualTo("unknown legacy movement type: XX");
     }
 
     @Test
