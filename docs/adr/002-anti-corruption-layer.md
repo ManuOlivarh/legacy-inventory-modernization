@@ -1,60 +1,39 @@
-# 002 — Translate raw CDC into domain events in one Kafka Streams service
+# 002. Translate raw CDC rows in one Kafka Streams service
 
-Status: accepted, 2026-09-17 (recorded after milestone 2)
+Date: 2026-09-17
 
 ## Context
 
-Raw CDC rows carry the legacy model: padded `CHAR` codes, quantities whose
-sign lives in another column, `DATETIME` in local time with no zone. If those
-rows become the contract, every consumer re-implements the same quirks and
-the legacy model never goes away.
-
-## Options
-
-| Option | Cost | Why not |
-|---|---|---|
-| Debezium SMTs (single message transforms) | No extra service | Cannot express the movement-type sign or the timezone fix without custom Java plugins inside Connect, which are harder to test and deploy |
-| Each consumer translates for itself | Nothing to run | The legacy model spreads to every team, which is the problem we are solving |
-| One translating service, Kafka Streams | One more service | **Chosen** |
-| Flink | Strong stateful processing | A cluster to operate for a load this size does not need |
+Raw CDC rows are the legacy model: padded `CHAR` codes, a quantity whose sign
+is in another column, `DATETIME` in local time without zone. If consumers read
+them directly, each one has to know all of that.
 
 ## Decision
 
-`inventory-translator` is the only reader of the raw topics. It publishes:
+`inventory-translator` is the only reader of the raw topics. It publishes
+`StockMoved` (signed quantity) and `StockLevelChanged` (on hand, reserved,
+available and the source LSN), both keyed by `sku:location` so each stock
+position stays ordered on one partition.
 
-- `inventory.stock-movements.v1` — `StockMoved`, signed quantity.
-- `inventory.stock-levels.v1` — `StockLevelChanged`, compacted, with
-  `available = onHand − reserved` and the source LSN.
+Stock levels are taken from `INV_STK`, not computed by summing movements. A
+running sum drifts forever after one lost or repeated event; the absolute
+value fixes itself on the next change.
 
-Both are keyed by `sku:location`, so all events for one stock position stay
-ordered on one partition.
+Contracts are Avro files in `contracts/`, registered by a separate step with
+`BACKWARD` compatibility. Services run with `auto.register.schemas=false`.
 
-**Stock levels come from `INV_STK`, not from summing movements.** A sum
-drifts forever after one missed or replayed event. Absolute values from the
-system of record correct themselves on the next change.
+It runs with `exactly_once_v2`.
 
-**Contracts are files.** Avro schemas live in `contracts/`, are published by
-a deliberate step with `BACKWARD` compatibility, and the service runs with
-`auto.register.schemas=false`.
+Debezium SMTs could do part of this, but not the sign or the timezone without
+custom plugins inside Connect. Flink would work too, but it's a cluster to
+run for a load this size doesn't need.
 
-**`processing.guarantee=exactly_once_v2`.** Reading the raw offset and
-writing the domain event commit in one Kafka transaction.
+## What it doesn't guarantee
 
-## What this does not guarantee
+EOS only covers Kafka to Kafka inside the translator. CDC is at least once,
+so a duplicated raw row still becomes a duplicated event, and anything that
+writes to a database needs to be idempotent (`movementId`, `sourceLsn`).
 
-- **No exactly-once from the ERP.** CDC is at-least-once (ADR 001). A
-  duplicate raw row becomes a duplicate domain event. EOS here only stops
-  the translator from adding duplicates of its own.
-- **No exactly-once outside Kafka.** Anything that writes to a database
-  must be idempotent. Consumers use `movementId` and `sourceLsn` for that.
-- **Unknown movement types are dropped with a warning** today. Milestone 3
-  sends them to a dead-letter topic instead.
-
-## Evidence
-
-- `TranslationTopologyTest`: one test per legacy quirk, no broker.
-- `TranslatorIT`: the Spring application with EOS against a real broker and
-  Schema Registry; a `read_committed` consumer sees the translated events,
-  and the registry holds only the published contract versions.
-- The full chain from SQL Server through Debezium is exercised by failure
-  drills F2 and F3, not by a unit-level test.
+Movements with an unknown type go to `inventory.translator.dlq` inside the
+same transaction. Other bad rows (for example an unparseable decimal) still
+stop the stream thread.

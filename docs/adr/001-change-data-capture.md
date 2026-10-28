@@ -1,86 +1,67 @@
-# 001 — Capture ERP changes with Debezium on SQL Server CDC
+# 001. Read ERP changes with Debezium
 
-Status: accepted, 2026-09-17 (recorded after milestone 1)
+Date: 2026-09-17
 
 ## Context
 
-The ERP is the system of record and cannot be changed: no triggers, no new
-columns, no application hooks. Sales channels need its stock changes within
-seconds. Today they get a nightly CSV.
+The ERP is the system of record and we can't change it: no triggers, no new
+columns. The online channels need its stock changes in seconds instead of the
+nightly CSV.
 
-## Options
-
-| Option | Cost | Why not |
-|---|---|---|
-| Poll tables by `FEC_ULT` | Simple, no extra infrastructure | Misses changes inside the same second, misses deletes, loads the ERP with scans, and `FEC_ULT` is local time with no zone |
-| Triggers writing an outbox table | Exact | Changes the ERP schema, which is the one thing we are not allowed to do |
-| SQL Server CDC + Debezium | Agent job and a Connect cluster to run | **Chosen** |
+Polling by `FEC_ULT` was the cheap option, but it misses deletes, misses
+changes within the same second, and `FEC_ULT` is local time. Triggers would
+have been exact, but they change the ERP schema.
 
 ## Decision
 
-SQL Server CDC on `INV_ART`, `INV_STK` and `INV_MOV`, read by the Debezium
-SQL Server connector on Kafka Connect. CDC is a database feature enabled by
-the DBA; the ERP's tables, procedures and application are untouched.
+Enable SQL Server CDC on `INV_ART`, `INV_STK` and `INV_MOV` and read it with
+the Debezium SQL Server connector.
 
-- **Initial snapshot.** `snapshot.mode=initial`: the first start reads the
-  current tables, then streams from the log. Snapshot rows arrive with
-  `op=r` and the translator treats them like inserts.
-- **Restart.** Connect stores the last committed LSN in `_connect-offsets`
-  (replication factor 3). A restarted connector resumes from it. Delivery is
-  at-least-once: changes between the last offset commit and a crash are read
-  again, so every consumer downstream must tolerate duplicates.
-- **Capture job every second.** SQL Server's capture job scans the log
-  every 5 s by default, which alone kept 9% of changes outside the freshness
-  SLO. It runs with `pollinginterval = 1` (ADR 005).
-- **Least privilege.** Debezium logs in as `debezium`, a reader of the
-  captured tables and the `cdc` schema, not `db_owner`. Its password comes
-  from an environment config provider, never from the connector JSON.
-- **Raw topics are internal.** One topic per table, JSON without schemas.
-  Only the translating services may read them (ADR 002).
+- `snapshot.mode=initial`: first start reads the tables, then streams the log.
+- Offsets live in `_connect-offsets` (RF 3). After a restart the connector
+  continues from the last committed LSN, so delivery is at least once.
+- Debezium uses its own login with read access to the captured tables and
+  the `cdc` schema. Its password comes from an env config provider.
+- The capture job polls every second (`pollinginterval = 1`). With the
+  default of 5 s, 9% of changes missed the freshness SLO (see 004).
+- Raw topics are internal. Only the translator reads them (002).
 
-## What happens if the connector is down for 6 hours
+## Connector down for a while
 
-SQL Server keeps change rows until its cleanup job removes them. The
-retention is the SQL Server default, 3 days (4320 minutes); this project does
-not set it. So:
+Change rows are kept for 3 days (SQL Server default, not set here).
 
-- **Down 6 hours:** the connector restarts at its stored LSN, reads the
-  backlog and catches up. Nothing is lost. Freshness is gone for those 6
-  hours plus catch-up time, which the lag metric (milestone 3) must show.
-- **Down longer than retention:** the stored LSN no longer exists in the
-  change tables. The connector fails on start instead of silently skipping.
-  Recovery is a new snapshot, which re-emits current state. Movements made
-  during the gap are lost as individual events; stock levels are still
-  correct because they are absolute values, not sums.
+If the connector is down for 6 hours it restarts from its offset and works
+through the backlog. Nothing is lost, it's just late.
 
-## Found in practice: offsets that outlive the database
+If it's down longer than the retention, the stored LSN is gone from the
+change tables and the connector fails on start. Recovery is a new snapshot.
+The movements in that gap are lost as events, but stock levels come out right
+because they're absolute values.
 
-On 2026-10-28 a Compose change recreated the SQL Server container, which has
-no volume, so the ERP started again from an empty log. Kafka and Connect kept
-their data, including the stored offset: LSN `000000e0:…` from the old
-database. The new database was at `0000002e:…`.
+## Incident: offsets newer than the database (2026-10-28)
 
-Debezium then **skipped every change while reporting the connector as
-`RUNNING`**: it waits for the log to pass the stored LSN. The simulator kept
-writing, the raw topics stopped growing, and nothing failed. Only the
-freshness histogram, with no new observations, gave it away.
+A Compose change recreated the SQL Server container. It has no volume, so the
+ERP came back with an empty log at LSN `0000002e:...`. Kafka Connect still had
+the old offset, `000000e0:...`.
 
-The same thing happens in production when the source database is restored
-from a backup or failed over to a replica with an older log. Mitigations:
+The connector stayed `RUNNING` and published nothing. It was waiting for the
+log to reach the stored LSN. The simulator kept writing and no component
+reported an error. I noticed because the freshness histogram stopped getting
+new observations.
 
-- Freshness alert on "no new observations", not only on slow ones.
-- Reconciliation (milestone 4) catches the resulting drift whatever the cause.
-- A start-up check that the stored LSN is not ahead of `sys.fn_cdc_get_max_lsn()`
-  turns a silent stall into a loud failure. To be decided with the failure drills.
-- Recovery: delete the connector's offsets and take a new snapshot.
+The same can happen in production after restoring the ERP from a backup or
+failing over to a replica that is behind. What we have or plan against it:
+
+- alert when freshness gets no new observations, not only when it's slow;
+- reconciliation against the ERP, which catches it whatever the cause;
+- maybe a startup check that the stored LSN isn't ahead of
+  `sys.fn_cdc_get_max_lsn()`, to be tried in the failure drills;
+- recovery: delete the connector offsets and take a new snapshot.
 
 ## Consequences
 
-- Duplicates are normal, not a fault. Idempotent consumers are a
-  requirement, not an optimisation.
-- The ERP's transaction log grows while CDC is behind. A long outage of
-  Connect is also a disk-space risk for the ERP, which is the one system we
-  must not hurt. Retention and log size need an alert before this goes near
-  production.
-- The 6-hour and past-retention cases are claims until failure drill F3
-  measures them.
+Duplicates are expected, so every consumer has to be idempotent.
+
+While CDC is behind, the ERP transaction log keeps growing. A long Connect
+outage is a disk risk for the ERP, so log size needs an alert before this goes
+anywhere near production.

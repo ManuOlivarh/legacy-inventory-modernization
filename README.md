@@ -1,14 +1,14 @@
 # Legacy Inventory Modernization
 
-Real-time stock availability for a retailer whose inventory lives in a legacy
-SQL Server ERP that cannot be changed, built with Change Data Capture, Kafka
-and the strangler fig pattern, and tested against infrastructure failures.
+A retailer keeps its inventory in an old SQL Server ERP that can't be changed,
+and the online channels only see stock once a day. This project streams the
+ERP's changes through Debezium and Kafka into a read model that serves
+availability within seconds, without touching the ERP.
 
-The design is in [docs/design.md](docs/design.md) and each decision has a
-record in [docs/adr](docs/adr). Today the system captures ERP changes,
-publishes them as versioned domain events and serves availability from an
-idempotent read model; reconciliation and failure drills follow the
-milestones in the design.
+What works today: CDC from the ERP, translation into versioned Avro events,
+and the availability API with its own Postgres. See
+[docs/architecture.md](docs/architecture.md) and the decisions in
+[docs/adr](docs/adr).
 
 ## Requirements
 
