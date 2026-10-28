@@ -1,6 +1,5 @@
 package dev.joseherrera.inventory.simulator;
 
-/** Movement types as the legacy ERP encodes them in INV_MOV.MOV_TIP. */
 public enum MovementType {
     SALE("VT"),
     RETURN("DV"),

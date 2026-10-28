@@ -1,3 +1,1 @@
-# Single source of truth for the JDK. Read by SDKMAN (`sdk env install`)
-# and by CI (actions/setup-java java-version-file). Maven is pinned by ./mvnw.
 java=25.0.4-tem

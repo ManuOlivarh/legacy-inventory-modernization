@@ -18,10 +18,6 @@ import org.springframework.kafka.listener.DeadLetterPublishingRecoverer;
 import org.springframework.kafka.listener.DefaultErrorHandler;
 import org.springframework.util.backoff.ExponentialBackOff;
 
-/**
- * Failure handling from ADR 005: poison goes straight to the DLQ, an outage
- * stalls the partition until it is over, anything else gets a few attempts.
- */
 @Configuration
 class KafkaConfiguration {
 
@@ -32,12 +28,9 @@ class KafkaConfiguration {
 
     @Bean
     DefaultErrorHandler errorHandler(KafkaTemplate<Object, Object> template, AvailabilityProperties properties) {
-        // A negative partition lets the producer choose: the DLQ need not mirror the source layout.
         var recoverer = new DeadLetterPublishingRecoverer(template,
                 (record, error) -> new TopicPartition(properties.deadLetterTopic(), -1));
 
-        // No limit on attempts: during an outage the partition waits and lag grows.
-        // Dead-lettering here would fill the DLQ with healthy events.
         ExponentialBackOff untilRecovered = new ExponentialBackOff(500, 2.0);
         untilRecovered.setMaxInterval(Duration.ofSeconds(30).toMillis());
 
@@ -56,7 +49,6 @@ class KafkaConfiguration {
                 || StockLevelDecoder.hasCause(error, RecoverableDataAccessException.class)
                 || StockLevelDecoder.hasCause(error, SQLTransientException.class)
                 || StockLevelDecoder.hasCause(error, SQLRecoverableException.class)
-                // Schema Registry unreachable (see StockLevelDecoder).
                 || (StockLevelDecoder.hasCause(error, SerializationException.class)
                     && StockLevelDecoder.hasCause(error, IOException.class));
     }

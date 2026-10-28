@@ -37,8 +37,6 @@ class SimulatorRunner implements ApplicationRunner {
         log.info("Simulating {} movements/s against the legacy ERP", properties.movementsPerSecond());
     }
 
-    // Runs on the single scheduler thread only. An exception escaping here would
-    // silently cancel all future runs, so failures are logged and the next tick retries.
     private void tick(MovementGenerator generator) {
         try {
             erp.record(generator.next());

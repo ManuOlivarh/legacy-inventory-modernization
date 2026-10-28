@@ -47,16 +47,9 @@ import io.confluent.kafka.serializers.AbstractKafkaSchemaSerDeConfig;
 import io.confluent.kafka.serializers.KafkaAvroDeserializer;
 import io.confluent.kafka.serializers.KafkaAvroDeserializerConfig;
 
-/**
- * The translator as it runs in production: Spring context, exactly_once_v2, a real
- * broker and a real Schema Registry holding only the contracts from contracts/.
- * Input is Debezium-shaped JSON, the same envelope the connector writes; the
- * connector itself is exercised by the failure drills, not here.
- */
 @SpringBootTest
 class TranslatorIT {
 
-    // Keep in sync with the defaults in compose.yaml.
     private static final String KAFKA_IMAGE = "apache/kafka:4.3.1";
     private static final String REGISTRY_IMAGE = "confluentinc/cp-schema-registry:8.3.2";
 
@@ -83,8 +76,6 @@ class TranslatorIT {
     private static final HttpClient http = HttpClient.newHttpClient();
     private static final ObjectMapper json = new ObjectMapper();
 
-    // Topics and contracts must exist before the Spring context starts the stream,
-    // exactly as kafka-init and schema-init run before the service in Compose.
     static {
         Startables.deepStart(kafka, registry).join();
         createTopics();
@@ -95,7 +86,6 @@ class TranslatorIT {
     static void kafkaProperties(DynamicPropertyRegistry properties) {
         properties.add("spring.kafka.bootstrap-servers", kafka::getBootstrapServers);
         properties.add("spring.kafka.properties.schema.registry.url", TranslatorIT::registryUrl);
-        // One broker here; production runs three.
         properties.add("spring.kafka.streams.properties.replication.factor", () -> "1");
         properties.add("spring.kafka.streams.properties.min.insync.replicas", () -> "1");
     }
@@ -130,10 +120,6 @@ class TranslatorIT {
         assertThat(get("/subjects")).doesNotContain(MOVEMENTS_IN, STOCK_IN);
     }
 
-    /**
-     * Reads with read_committed, so a record only shows up once the translator's
-     * transaction has committed: what a downstream consumer would see.
-     */
     private static Object firstCommitted(String topic, String key) {
         Map<String, Object> config = Map.of(
                 ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, kafka.getBootstrapServers(),
@@ -216,7 +202,6 @@ class TranslatorIT {
         }
     }
 
-    /** Same steps as contracts/register.py: pin BACKWARD, then publish the file. */
     private static void registerContracts() {
         Map<String, String> subjects = Map.of(
                 MOVEMENTS_OUT + "-value", "StockMoved.avsc",

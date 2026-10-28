@@ -20,17 +20,14 @@
     <description>Event-driven modernization of a legacy inventory ERP with CDC, Kafka and the strangler fig pattern.</description>
 
     <modules>
-        <!-- Services are added milestone by milestone; see docs/design.md. -->
         <module>erp-simulator</module>
         <module>inventory-translator</module>
         <module>availability-api</module>
     </modules>
 
     <properties>
-        <!-- Keep in sync with .sdkmanrc; the enforcer below fails the build if they drift. -->
         <java.version>25</java.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <!-- Fixed timestamp for reproducible artifacts. -->
         <project.build.outputTimestamp>2026-09-17T00:00:00Z</project.build.outputTimestamp>
     </properties>
 

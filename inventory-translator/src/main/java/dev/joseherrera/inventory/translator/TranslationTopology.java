@@ -23,16 +23,11 @@ import com.fasterxml.jackson.databind.JsonNode;
 import dev.joseherrera.inventory.events.StockLevelChanged;
 import dev.joseherrera.inventory.events.StockMoved;
 
-/**
- * Raw CDC rows in, domain events out. Nothing downstream ever sees a legacy
- * column name, a padded CHAR, a local timestamp or an unsigned quantity.
- */
 @Configuration
 class TranslationTopology {
 
     private static final Logger log = LoggerFactory.getLogger(TranslationTopology.class);
 
-    /** Why a record was dead-lettered; the payload itself is the untouched raw change event. */
     static final String DLQ_REASON_HEADER = "dlq.reason";
 
     private final TranslatorProperties properties;
@@ -57,9 +52,6 @@ class TranslationTopology {
         return new Object();
     }
 
-    // A movement type nobody has seen before is a data problem, not a reason to stop
-    // the pipeline. It goes to the dead-letter topic inside the same EOS transaction,
-    // so it is neither lost nor published as a domain event.
     private void movements(StreamsBuilder builder) {
         builder.stream(properties.movementsInputTopic(), Consumed.with(Serdes.String(), changeEventSerde))
                 .filter((key, change) -> isInsertOrUpdate(change))
@@ -81,8 +73,6 @@ class TranslationTopology {
                 .to(properties.stockLevelsOutputTopic(), Produced.with(Serdes.String(), stockLevelSerde));
     }
 
-    // Deletes arrive as tombstones and as op=d; the ERP never deletes stock rows,
-    // so anything else is skipped rather than guessed at.
     private boolean isInsertOrUpdate(JsonNode change) {
         if (change == null || change.get("after") == null || change.get("after").isNull()) {
             return false;
@@ -131,10 +121,6 @@ class TranslationTopology {
         return java.time.Instant.ofEpochMilli(tsMs);
     }
 
-    /**
-     * All events for one stock position share a key, so they land on one partition
-     * and stay in order. That is the only ordering guarantee the domain needs.
-     */
     private static String key(String sku, String location) {
         return sku + ":" + location;
     }

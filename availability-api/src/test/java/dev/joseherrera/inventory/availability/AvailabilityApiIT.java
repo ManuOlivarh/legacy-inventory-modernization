@@ -58,15 +58,9 @@ import dev.joseherrera.inventory.events.StockLevelChanged;
 import io.confluent.kafka.serializers.AbstractKafkaSchemaSerDeConfig;
 import io.confluent.kafka.serializers.KafkaAvroSerializer;
 
-/**
- * The read model against a real broker, Schema Registry and Postgres: idempotency,
- * dead-lettering of poison (F4) and stalling, not dead-lettering, while the
- * database is unavailable (first version of F6).
- */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 class AvailabilityApiIT {
 
-    // Keep in sync with the defaults in compose.yaml.
     private static final String KAFKA_IMAGE = "apache/kafka:4.3.1";
     private static final String REGISTRY_IMAGE = "confluentinc/cp-schema-registry:8.3.2";
     private static final String POSTGRES_IMAGE = "postgres:18.1-alpine";
@@ -95,7 +89,6 @@ class AvailabilityApiIT {
     private static final HttpClient http = HttpClient.newHttpClient();
     private static final ObjectMapper json = new ObjectMapper();
 
-    // Topics and the contract must exist before the listener starts, as in Compose.
     static {
         Startables.deepStart(kafka, registry, postgres).join();
         createTopics();
@@ -106,8 +99,6 @@ class AvailabilityApiIT {
     static void properties(DynamicPropertyRegistry properties) {
         properties.add("spring.kafka.bootstrap-servers", kafka::getBootstrapServers);
         properties.add("spring.kafka.properties.schema.registry.url", AvailabilityApiIT::registryUrl);
-        // Shorter than production so a paused database fails fast and the outage test
-        // stays short; the behaviour under test does not depend on the value.
         properties.add("spring.datasource.url", () -> postgres.getJdbcUrl()
                 + (postgres.getJdbcUrl().contains("?") ? "&" : "?") + "socketTimeout=2");
         properties.add("spring.datasource.username", postgres::getUsername);
@@ -178,8 +169,6 @@ class AvailabilityApiIT {
         docker.pauseContainerCmd(postgres.getContainerId()).exec();
         try {
             send(level(sku, "T001", "21.00", "0000002c:00000a38:0001"));
-            // Long enough for the "few attempts" policy (4 tries, each failing within
-            // ~3 s, plus 3.5 s of backoff) to have dead-lettered it if it applied here.
             assertThat(deadLetter(sku + ":T001", Duration.ofSeconds(25))).isNull();
         } finally {
             docker.unpauseContainerCmd(postgres.getContainerId()).exec();
@@ -270,7 +259,6 @@ class AvailabilityApiIT {
         return Map.of(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, kafka.getBootstrapServers());
     }
 
-    /** Waits until the service has committed past this record, i.e. has finished with it. */
     private static void awaitConsumed(RecordMetadata record) {
         var partition = new TopicPartition(record.topic(), record.partition());
         try (var admin = admin()) {
@@ -349,7 +337,6 @@ class AvailabilityApiIT {
         }
     }
 
-    /** Same steps as contracts/register.py, for the one contract this service reads. */
     private static void registerContract() {
         try {
             String subject = LEVELS + "-value";

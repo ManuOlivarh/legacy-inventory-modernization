@@ -1,9 +1,6 @@
 USE ERPDB;
 GO
 
--- The only write path the legacy application uses. It records the movement and
--- updates stock in one transaction. Like many legacy systems, it does not stop
--- stock from going negative.
 CREATE OR ALTER PROCEDURE dbo.SP_INV_MOVIMIENTO
     @ART_COD CHAR(12),
     @BOD_COD CHAR(4),

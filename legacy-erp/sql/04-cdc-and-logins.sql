@@ -1,5 +1,3 @@
--- Change Data Capture and least-privilege logins.
--- Requires SQL Server Agent (MSSQL_AGENT_ENABLED=true).
 USE ERPDB;
 GO
 
@@ -32,7 +30,6 @@ CLOSE c;
 DEALLOCATE c;
 GO
 
--- Debezium reads the captured tables and the cdc schema. It is not db_owner.
 USE master;
 GO
 IF SUSER_ID('debezium') IS NULL
@@ -51,7 +48,6 @@ GRANT SELECT ON SCHEMA::cdc TO debezium;
 GRANT VIEW DATABASE STATE TO debezium;
 GO
 
--- The legacy application may only call the stored procedure and read master data.
 USE master;
 GO
 IF SUSER_ID('erp_app') IS NULL

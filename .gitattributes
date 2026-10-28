@@ -1,11 +1,8 @@
-# Normalize line endings so the repo behaves the same on Linux, macOS and Windows.
 * text=auto eol=lf
 
-# Shell scripts must stay LF or they break when checked out on Windows and run in containers.
 mvnw text eol=lf
 *.sh text eol=lf
 
-# Windows scripts need CRLF.
 *.cmd text eol=crlf
 *.bat text eol=crlf
 

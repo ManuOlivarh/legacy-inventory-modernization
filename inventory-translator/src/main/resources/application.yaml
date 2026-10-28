@@ -10,8 +10,6 @@ spring:
     streams:
       application-id: inventory-translator
       properties:
-        # Reads, state and writes commit together: a crash mid-batch cannot
-        # duplicate or lose a translated event (failure scenario F2).
         processing.guarantee: exactly_once_v2
         replication.factor: 3
         min.insync.replicas: 2
@@ -23,7 +21,6 @@ translator:
   movements-output-topic: inventory.stock-movements.v1
   stock-levels-output-topic: inventory.stock-levels.v1
   dead-letter-topic: inventory.translator.dlq
-  # The ERP writes DATETIME without a zone; this is the zone it means.
   legacy-timezone: America/Guatemala
 
 logging:

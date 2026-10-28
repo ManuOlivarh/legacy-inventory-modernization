@@ -43,7 +43,6 @@ class SerdeConfiguration {
         SpecificAvroSerde<T> serde = new SpecificAvroSerde<>();
         serde.configure(Map.of(
                 AbstractKafkaSchemaSerDeConfig.SCHEMA_REGISTRY_URL_CONFIG, schemaRegistryUrl,
-                // Contracts are published deliberately, not by whatever the app happens to send.
                 AbstractKafkaSchemaSerDeConfig.AUTO_REGISTER_SCHEMAS, "false",
                 AbstractKafkaSchemaSerDeConfig.USE_LATEST_VERSION, "true"), false);
         return serde;

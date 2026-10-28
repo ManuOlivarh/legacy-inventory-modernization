@@ -1,10 +1,7 @@
-# Build output
 target/
 
-# Local environment overrides (commit .env.example, never .env)
 .env
 
-# IDEs and OS noise
 .idea/
 *.iml
 .vscode/

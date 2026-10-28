@@ -12,11 +12,6 @@ import dev.joseherrera.inventory.events.StockLevelChanged;
 @Repository
 class StockLevelRepository {
 
-    // The WHERE clause is the whole idempotency story (ADR 005): duplicates and
-    // replays of older events match no row and change nothing. `>=` rather than `>`
-    // because two updates to one row in the same ERP transaction share a commit LSN,
-    // and the later one, which arrives later on the same partition, must still apply.
-    // LSNs are fixed-width hex, so text order is log order.
     private static final String UPSERT = """
             INSERT INTO stock_level (sku, location, on_hand, reserved, available, changed_at, source_lsn, updated_at)
             VALUES (:sku, :location, :onHand, :reserved, :available, :changedAt, :sourceLsn, :updatedAt)
@@ -38,7 +33,6 @@ class StockLevelRepository {
         this.clock = clock;
     }
 
-    /** @return true if the event was applied, false if a newer value was already there */
     boolean apply(StockLevelChanged event) {
         return jdbc.sql(UPSERT)
                 .param("sku", event.getSku())

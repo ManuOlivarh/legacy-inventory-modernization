@@ -12,10 +12,6 @@ import io.confluent.kafka.serializers.AbstractKafkaSchemaSerDeConfig;
 import io.confluent.kafka.serializers.KafkaAvroDeserializer;
 import io.confluent.kafka.serializers.KafkaAvroDeserializerConfig;
 
-/**
- * Decodes and validates in the listener rather than in the consumer, so every
- * failure, a bad payload included, still has the original bytes to dead-letter.
- */
 @Component
 class StockLevelDecoder {
 
@@ -32,7 +28,6 @@ class StockLevelDecoder {
         try {
             event = (StockLevelChanged) deserializer.deserialize(topic, value);
         } catch (SerializationException e) {
-            // A registry that cannot be reached is an outage, not a bad record.
             if (hasCause(e, IOException.class)) {
                 throw e;
             }
@@ -51,7 +46,6 @@ class StockLevelDecoder {
         if (event.getSku().isBlank() || event.getLocation().isBlank()) {
             throw new InvalidEventException("stock level without sku or location");
         }
-        // Without an LSN the event cannot be ordered against the stored value.
         if (event.getSourceLsn().isBlank()) {
             throw new InvalidEventException("stock level without source LSN");
         }

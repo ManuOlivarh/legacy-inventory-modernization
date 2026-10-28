@@ -3,10 +3,6 @@ package dev.joseherrera.inventory.simulator;
 import java.util.List;
 import java.util.random.RandomGenerator;
 
-/**
- * Produces a plausible mix of store and warehouse activity: mostly sales, some
- * receipts, and a trickle of returns and stock-count adjustments.
- */
 public final class MovementGenerator {
 
     private final List<String> articles;

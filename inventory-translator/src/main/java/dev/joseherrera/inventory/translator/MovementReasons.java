@@ -4,7 +4,6 @@ import java.math.BigDecimal;
 
 import dev.joseherrera.inventory.events.MovementReason;
 
-/** Translates INV_MOV.MOV_TIP, where the direction of the movement lives. */
 enum MovementReasons {
 
     VT(MovementReason.SALE, -1),
@@ -42,7 +41,6 @@ enum MovementReasons {
         return reason;
     }
 
-    /** The legacy quantity is always positive; the sign comes from the type. */
     BigDecimal signed(BigDecimal quantity) {
         return quantity.abs().multiply(BigDecimal.valueOf(sign));
     }

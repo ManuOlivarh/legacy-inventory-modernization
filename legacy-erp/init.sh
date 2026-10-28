@@ -1,6 +1,4 @@
 #!/usr/bin/env bash
-# Applies the legacy ERP scripts in order. Every script is idempotent, so this
-# is safe to run on every `docker compose up`.
 set -euo pipefail
 
 for script in /init/sql/*.sql; do

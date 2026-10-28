@@ -30,10 +30,6 @@ import dev.joseherrera.inventory.events.StockMoved;
 import io.confluent.kafka.serializers.AbstractKafkaSchemaSerDeConfig;
 import io.confluent.kafka.streams.serdes.avro.SpecificAvroSerde;
 
-/**
- * Drives the topology without a broker. The legacy quirks documented in
- * docs/legacy-erp.md each have a test here.
- */
 class TranslationTopologyTest {
 
     private static final String REGISTRY = "mock://translation-topology-test";
@@ -113,7 +109,6 @@ class TranslationTopologyTest {
 
     @Test
     void localErpTimestampsBecomeUtcInstants() {
-        // 08:00 on the ERP's wall clock in Guatemala is 14:00 UTC.
         long wallClock = LocalDateTime.of(2026, 9, 17, 8, 0).toInstant(ZoneOffset.UTC).toEpochMilli();
         var change = movement("VT", "1.00");
         ((com.fasterxml.jackson.databind.node.ObjectNode) change.get("after")).put("MOV_FEC", wallClock);
@@ -162,7 +157,6 @@ class TranslationTopologyTest {
 
     @Test
     void negativeStockSurvivesTranslation() {
-        // The legacy procedure allows it, so the contract must represent it.
         stockIn.pipeInput(null, stock("-2.00", "0.00"));
 
         assertThat(levelsOut.readValue().getAvailable()).isEqualByComparingTo(new BigDecimal("-2.00"));
@@ -204,8 +198,6 @@ class TranslationTopologyTest {
         return change;
     }
 
-    // Unlike production, the test registry accepts new schemas: there is nothing
-    // else to publish them into a per-test mock registry.
     private static <T extends org.apache.avro.specific.SpecificRecord> Serde<T> testSerde() {
         SpecificAvroSerde<T> serde = new SpecificAvroSerde<>();
         serde.configure(Map.of(AbstractKafkaSchemaSerDeConfig.SCHEMA_REGISTRY_URL_CONFIG, REGISTRY), false);

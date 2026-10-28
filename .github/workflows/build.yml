@@ -14,7 +14,6 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      # The JDK version comes from .sdkmanrc, the same file local development uses.
       - uses: actions/setup-java@v6
         with:
           distribution: temurin

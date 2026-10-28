@@ -19,7 +19,6 @@
     </properties>
 
     <repositories>
-        <!-- The Avro deserializer that speaks to Schema Registry is not on Maven Central. -->
         <repository>
             <id>confluent</id>
             <url>https://packages.confluent.io/maven/</url>
@@ -30,13 +29,11 @@
 
     <dependencyManagement>
         <dependencies>
-            <!-- Same conflict as in inventory-translator: pin the newer version. -->
             <dependency>
                 <groupId>org.apache.commons</groupId>
                 <artifactId>commons-compress</artifactId>
                 <version>1.28.0</version>
             </dependency>
-            <!-- Annotations only, reached through the Postgres driver and Guava. -->
             <dependency>
                 <groupId>org.checkerframework</groupId>
                 <artifactId>checker-qual</artifactId>
@@ -84,7 +81,6 @@
             <artifactId>kafka-avro-serializer</artifactId>
             <version>${confluent.version}</version>
             <exclusions>
-                <!-- Pulled in transitively; the Boot-managed versions are the ones we run. -->
                 <exclusion>
                     <groupId>org.apache.kafka</groupId>
                     <artifactId>kafka-clients</artifactId>
@@ -101,7 +97,6 @@
             <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>
         </dependency>
-        <!-- Integration tests run against a real broker, Schema Registry and Postgres. -->
         <dependency>
             <groupId>org.testcontainers</groupId>
             <artifactId>testcontainers-kafka</artifactId>
@@ -142,7 +137,6 @@
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
             </plugin>
-            <!-- *IT classes need Docker; they run in `verify`, after the unit tests. -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-failsafe-plugin</artifactId>

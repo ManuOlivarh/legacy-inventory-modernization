@@ -19,10 +19,6 @@ class AvailabilityController {
         this.repository = repository;
     }
 
-    /**
-     * @return 404 when the SKU has never been seen. {@code asOf} is the oldest value in
-     *         the answer: the whole response is at least that fresh, and no fresher claim is made.
-     */
     @GetMapping("/availability/{sku}")
     ResponseEntity<Availability> availability(@PathVariable String sku) {
         List<StockPosition> locations = repository.findBySku(sku);

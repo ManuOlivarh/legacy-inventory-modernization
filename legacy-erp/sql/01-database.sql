@@ -1,5 +1,3 @@
--- Legacy ERP database. Column names and codes are intentionally terse and in
--- Spanish, the way a 15-year-old regional ERP would look. See docs/legacy-erp.md.
 IF DB_ID('ERPDB') IS NULL
     CREATE DATABASE ERPDB;
 GO
@@ -11,17 +9,17 @@ IF OBJECT_ID('dbo.INV_BOD') IS NULL
 CREATE TABLE dbo.INV_BOD (
     BOD_COD CHAR(4)     NOT NULL PRIMARY KEY,
     BOD_NOM VARCHAR(40) NOT NULL,
-    BOD_TIP CHAR(1)     NOT NULL            -- C = central warehouse, T = store
+    BOD_TIP CHAR(1)     NOT NULL
 );
 GO
 
 IF OBJECT_ID('dbo.INV_ART') IS NULL
 CREATE TABLE dbo.INV_ART (
     ART_COD CHAR(12)    NOT NULL PRIMARY KEY,
-    ART_DES VARCHAR(40) NOT NULL,           -- cryptic abbreviated description
+    ART_DES VARCHAR(40) NOT NULL,
     ART_CAT CHAR(3)     NOT NULL,
-    ART_UM  CHAR(3)     NOT NULL,           -- unit of measure
-    ART_EST CHAR(1)     NOT NULL DEFAULT 'A',  -- A = active, I = inactive
+    ART_UM  CHAR(3)     NOT NULL,
+    ART_EST CHAR(1)     NOT NULL DEFAULT 'A',
     FEC_ALT DATETIME    NOT NULL DEFAULT GETDATE()
 );
 GO
@@ -30,7 +28,7 @@ IF OBJECT_ID('dbo.INV_STK') IS NULL
 CREATE TABLE dbo.INV_STK (
     ART_COD CHAR(12)      NOT NULL REFERENCES dbo.INV_ART (ART_COD),
     BOD_COD CHAR(4)       NOT NULL REFERENCES dbo.INV_BOD (BOD_COD),
-    STK_EXI DECIMAL(12,2) NOT NULL,         -- on hand; DECIMAL even for units, and it can go negative
+    STK_EXI DECIMAL(12,2) NOT NULL,
     STK_RES DECIMAL(12,2) NOT NULL DEFAULT 0,
     FEC_ULT DATETIME      NOT NULL DEFAULT GETDATE(),
     CONSTRAINT PK_INV_STK PRIMARY KEY (ART_COD, BOD_COD)
@@ -42,8 +40,8 @@ CREATE TABLE dbo.INV_MOV (
     MOV_NUM BIGINT IDENTITY(1,1) NOT NULL PRIMARY KEY,
     ART_COD CHAR(12)      NOT NULL,
     BOD_COD CHAR(4)       NOT NULL,
-    MOV_TIP CHAR(2)       NOT NULL,         -- VT sale, DV return, RC receipt, AP adjust +, AN adjust -
-    MOV_CAN DECIMAL(12,2) NOT NULL,         -- always positive; the sign lives in MOV_TIP
+    MOV_TIP CHAR(2)       NOT NULL,
+    MOV_CAN DECIMAL(12,2) NOT NULL,
     MOV_FEC DATETIME      NOT NULL DEFAULT GETDATE(),
     MOV_USR VARCHAR(10)   NOT NULL,
     MOV_REF VARCHAR(20)   NULL

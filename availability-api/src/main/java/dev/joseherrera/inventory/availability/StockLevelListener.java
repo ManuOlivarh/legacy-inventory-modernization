@@ -11,7 +11,6 @@ import dev.joseherrera.inventory.events.StockLevelChanged;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 
-/** Projects stock-level events into the read model. Failures are classified in {@link KafkaConfiguration}. */
 @Component
 class StockLevelListener {
 
@@ -24,7 +23,6 @@ class StockLevelListener {
         this.decoder = decoder;
         this.repository = repository;
         this.clock = clock;
-        // The freshness SLO (ADR 005): ERP commit to visible in the read model.
         this.freshness = Timer.builder("inventory.freshness")
                 .description("Time from the ERP change to the value being served by the API")
                 .serviceLevelObjectives(Duration.ofSeconds(1), Duration.ofSeconds(2), Duration.ofSeconds(5),

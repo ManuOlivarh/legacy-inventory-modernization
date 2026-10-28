@@ -5,7 +5,6 @@ import java.util.List;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Component;
 
-/** Talks to the legacy ERP exactly as its own application does: through the stored procedure. */
 @Component
 class LegacyErp {
 

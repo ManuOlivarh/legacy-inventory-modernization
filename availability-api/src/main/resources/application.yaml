@@ -1,14 +1,11 @@
 spring:
   application:
     name: availability-api
-  # Local defaults for running outside Compose; Compose overrides them.
   datasource:
     url: jdbc:postgresql://localhost:5432/availability?socketTimeout=10
     username: availability
     password: Availability_2026!
     hikari:
-      # Fail fast when the database is down, so the blocking retry (not a hung
-      # thread) decides what happens next. See ADR 005.
       connection-timeout: 3000
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
@@ -17,14 +14,11 @@ spring:
     consumer:
       group-id: availability-api
       auto-offset-reset: earliest
-      # Values are decoded in the listener, not by the consumer, so a record that
-      # fails for any reason can be dead-lettered byte for byte.
       value-deserializer: org.apache.kafka.common.serialization.ByteArrayDeserializer
     producer:
       value-serializer: org.apache.kafka.common.serialization.ByteArraySerializer
       acks: all
     listener:
-      # One consumer per partition of inventory.stock-levels.v1.
       concurrency: 3
 
 availability:
