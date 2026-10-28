@@ -29,6 +29,9 @@ the DBA; the ERP's tables, procedures and application are untouched.
   (replication factor 3). A restarted connector resumes from it. Delivery is
   at-least-once: changes between the last offset commit and a crash are read
   again, so every consumer downstream must tolerate duplicates.
+- **Capture job every second.** SQL Server's capture job scans the log
+  every 5 s by default, which alone kept 9% of changes outside the freshness
+  SLO. It runs with `pollinginterval = 1` (ADR 005).
 - **Least privilege.** Debezium logs in as `debezium`, a reader of the
   captured tables and the `cdc` schema, not `db_owner`. Its password comes
   from an environment config provider, never from the connector JSON.

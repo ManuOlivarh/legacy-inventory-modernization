@@ -30,6 +30,13 @@ CLOSE c;
 DEALLOCATE c;
 GO
 
+IF NOT EXISTS (SELECT 1 FROM msdb.dbo.cdc_jobs WHERE database_id = DB_ID() AND job_type = N'capture' AND pollinginterval = 1)
+BEGIN
+    EXEC sys.sp_cdc_drop_job @job_type = N'capture';
+    EXEC sys.sp_cdc_add_job @job_type = N'capture', @pollinginterval = 1;
+END;
+GO
+
 USE master;
 GO
 IF SUSER_ID('debezium') IS NULL

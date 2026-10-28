@@ -92,6 +92,16 @@ dominant cause is SQL Server's CDC capture job, which scans the log every
 5 s by default: that alone puts changes 0 to 5 s behind, evenly spread. The
 decision between tuning the capture job and relaxing the target is open.
 
+**Decision (2026-10-28): tune the capture job, keep the target.** The CDC
+capture job now scans every 1 s (`sys.sp_cdc_add_job @pollinginterval = 1`
+in `legacy-erp/sql/04-cdc-and-logins.sql`). This is job configuration a DBA
+owns, not a change to the ERP schema or application. The cost is more
+frequent log scans on the ERP server; at this load it was not measurable,
+and the load test has to confirm it under stress.
+
+**Second measurement (same setup, 120 s, 597 changes):** 18.6% within 1 s,
+100% within 2 s; mean 1.3 s. The 5 s target is met with margin.
+
 ### 5. Scope: reconciliation moves to its own milestone
 
 The design put the reconciler in milestone 3. It moves to milestone 4, with
