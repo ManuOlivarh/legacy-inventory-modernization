@@ -4,8 +4,10 @@ Real-time stock availability for a retailer whose inventory lives in a legacy
 SQL Server ERP that cannot be changed, built with Change Data Capture, Kafka
 and the strangler fig pattern, and tested against infrastructure failures.
 
-> **Status: in progress.** The design is in [docs/design.md](docs/design.md).
-> This README becomes the case study as milestones land.
+The design is in [docs/design.md](docs/design.md) and each decision has a
+record in [docs/adr](docs/adr). Today the system captures ERP changes and
+publishes them as versioned domain events; the read model, reconciliation and
+failure drills follow the milestones in the design.
 
 ## Requirements
 

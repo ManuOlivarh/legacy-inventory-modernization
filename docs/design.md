@@ -231,7 +231,7 @@ host paths, which don't behave the same on macOS and Windows.
 | Week | Deliverable | Done when |
 |---|---|---|
 | 1 | Repo bootstrap, Compose stack, legacy schema + simulator, Debezium streaming raw CDC | `docker compose up` then movements appear in `erp.raw.*` |
-| 2 | Translator with Avro contracts, EOS, stock-levels table | Testcontainers test: ERP rows → correct levels |
+| 2 | Translator with Avro contracts, EOS, stock-levels table | Testcontainers test: Debezium change events → committed Avro events on a real broker and registry |
 | 3 | availability-api projection, idempotency, retry/DLQ, reconciler | F4 passes; drift metric exported |
 | 4 | reservation-service, outbox, strangler flag | F7 passes |
 | 5 | catalog-enricher: structured output, cache, budget, stub, eval set in CI | Eval accuracy and cost per 1,000 items published; F8 passes |
