@@ -22,7 +22,10 @@ class StockLevelRepository {
                 changed_at = excluded.changed_at,
                 source_lsn = excluded.source_lsn,
                 updated_at = excluded.updated_at
-            WHERE excluded.source_lsn >= stock_level.source_lsn
+            WHERE excluded.source_lsn > stock_level.source_lsn
+               OR (excluded.source_lsn = stock_level.source_lsn
+                   AND (excluded.on_hand, excluded.reserved, excluded.changed_at)
+                       IS DISTINCT FROM (stock_level.on_hand, stock_level.reserved, stock_level.changed_at))
             """;
 
     private final JdbcClient jdbc;

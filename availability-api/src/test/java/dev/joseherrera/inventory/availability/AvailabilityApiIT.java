@@ -111,6 +111,9 @@ class AvailabilityApiIT {
     @Autowired
     private JdbcClient jdbc;
 
+    @Autowired
+    private io.micrometer.core.instrument.MeterRegistry meters;
+
     @Test
     void olderEventsAndDuplicatesNeverOverwriteANewerValue() throws Exception {
         String sku = newSku();
@@ -121,6 +124,20 @@ class AvailabilityApiIT {
         awaitConsumed(last);
 
         assertThat(onHand(sku, "T001")).isEqualByComparingTo("10.00");
+    }
+
+    @Test
+    void anExactRedeliveryIsNotRewrittenNorCountedAsFresh() throws Exception {
+        String sku = newSku();
+        StockLevelChanged event = level(sku, "T001", "9.00", "0000002c:00000a38:0003");
+        awaitConsumed(send(event));
+        long observed = meters.get("inventory.freshness").timer().count();
+        Instant updatedAt = updatedAt(sku, "T001");
+
+        awaitConsumed(send(event));
+
+        assertThat(meters.get("inventory.freshness").timer().count()).isEqualTo(observed);
+        assertThat(updatedAt(sku, "T001")).isEqualTo(updatedAt);
     }
 
     @Test
@@ -220,6 +237,14 @@ class AvailabilityApiIT {
                 .query(BigDecimal.class)
                 .optional()
                 .orElse(null);
+    }
+
+    private Instant updatedAt(String sku, String location) {
+        return jdbc.sql("SELECT updated_at FROM stock_level WHERE sku = ? AND location = ?")
+                .params(sku, location)
+                .query(java.sql.Timestamp.class)
+                .single()
+                .toInstant();
     }
 
     private static String newSku() {

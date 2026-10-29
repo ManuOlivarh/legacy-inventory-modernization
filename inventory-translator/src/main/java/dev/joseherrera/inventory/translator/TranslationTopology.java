@@ -2,13 +2,16 @@ package dev.joseherrera.inventory.translator;
 
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
+import java.util.function.Function;
 
 import org.apache.kafka.common.header.internals.RecordHeaders;
 import org.apache.kafka.common.serialization.Serde;
 import org.apache.kafka.common.serialization.Serdes;
+import org.apache.kafka.streams.KeyValue;
 import org.apache.kafka.streams.StreamsBuilder;
 import org.apache.kafka.streams.kstream.Branched;
 import org.apache.kafka.streams.kstream.Consumed;
+import org.apache.kafka.streams.kstream.KStream;
 import org.apache.kafka.streams.kstream.Produced;
 import org.apache.kafka.streams.processor.api.FixedKeyProcessor;
 import org.apache.kafka.streams.processor.api.FixedKeyProcessorContext;
@@ -53,24 +56,29 @@ class TranslationTopology {
     }
 
     private void movements(StreamsBuilder builder) {
-        builder.stream(properties.movementsInputTopic(), Consumed.with(Serdes.String(), changeEventSerde))
-                .filter((key, change) -> isInsertOrUpdate(change))
-                .split()
-                .branch((key, change) -> MovementReasons.isKnown(LegacyRow.text(change.get("after"), "MOV_TIP")),
-                        Branched.withConsumer(known -> known
-                                .map((key, change) -> toStockMoved(change.get("after"), change))
-                                .to(properties.movementsOutputTopic(), Produced.with(Serdes.String(), stockMovedSerde))))
-                .defaultBranch(Branched.withConsumer(unknown -> unknown
-                        .processValues(() -> new DeadLetterReason("unknown legacy movement type"))
-                        .to(properties.deadLetterTopic(), Produced.with(Serdes.String(), changeEventSerde))));
+        translate(builder, properties.movementsInputTopic(), properties.movementsOutputTopic(), stockMovedSerde,
+                change -> toStockMoved(change.get("after"), change));
     }
 
     private void stockLevels(StreamsBuilder builder) {
-        builder.stream(properties.stockInputTopic(), Consumed.with(Serdes.String(), changeEventSerde))
+        translate(builder, properties.stockInputTopic(), properties.stockLevelsOutputTopic(), stockLevelSerde,
+                change -> toStockLevel(change.get("after"), change));
+    }
+
+    private <T> void translate(StreamsBuilder builder, String input, String output, Serde<T> outputSerde,
+                               Function<JsonNode, KeyValue<String, T>> translation) {
+        KStream<String, Translation<T>> translated = builder
+                .stream(input, Consumed.with(Serdes.String(), changeEventSerde))
                 .filter((key, change) -> isInsertOrUpdate(change))
-                .map((key, change) -> toStockLevel(change.get("after"), change))
-                .filter((key, event) -> event != null)
-                .to(properties.stockLevelsOutputTopic(), Produced.with(Serdes.String(), stockLevelSerde));
+                .mapValues(change -> Translation.of(change, translation));
+        translated.split()
+                .branch((key, result) -> result.failure() == null,
+                        Branched.withConsumer(ok -> ok
+                                .map((key, result) -> result.event())
+                                .to(output, Produced.with(Serdes.String(), outputSerde))))
+                .defaultBranch(Branched.withConsumer(failed -> failed
+                        .processValues(DeadLetter<T>::new)
+                        .to(properties.deadLetterTopic(), Produced.with(Serdes.String(), changeEventSerde))));
     }
 
     private boolean isInsertOrUpdate(JsonNode change) {
@@ -81,7 +89,7 @@ class TranslationTopology {
         return op.equals("c") || op.equals("u") || op.equals("r");
     }
 
-    private org.apache.kafka.streams.KeyValue<String, StockMoved> toStockMoved(JsonNode row, JsonNode change) {
+    private KeyValue<String, StockMoved> toStockMoved(JsonNode row, JsonNode change) {
         String sku = LegacyRow.text(row, "ART_COD");
         String location = LegacyRow.text(row, "BOD_COD");
         String legacyType = LegacyRow.text(row, "MOV_TIP");
@@ -96,10 +104,10 @@ class TranslationTopology {
                 .setCapturedAt(capturedAt(change))
                 .setReference(LegacyRow.text(row, "MOV_REF"))
                 .build();
-        return org.apache.kafka.streams.KeyValue.pair(key(sku, location), event);
+        return KeyValue.pair(key(sku, location), event);
     }
 
-    private org.apache.kafka.streams.KeyValue<String, StockLevelChanged> toStockLevel(JsonNode row, JsonNode change) {
+    private KeyValue<String, StockLevelChanged> toStockLevel(JsonNode row, JsonNode change) {
         String sku = LegacyRow.text(row, "ART_COD");
         String location = LegacyRow.text(row, "BOD_COD");
         BigDecimal onHand = LegacyRow.decimal(row, "STK_EXI");
@@ -113,7 +121,7 @@ class TranslationTopology {
                 .setChangedAt(LegacyRow.timestamp(row, "FEC_ULT", properties.legacyTimezone()))
                 .setSourceLsn(change.path("source").path("commit_lsn").asText(""))
                 .build();
-        return org.apache.kafka.streams.KeyValue.pair(key(sku, location), event);
+        return KeyValue.pair(key(sku, location), event);
     }
 
     private java.time.Instant capturedAt(JsonNode change) {
@@ -125,14 +133,20 @@ class TranslationTopology {
         return sku + ":" + location;
     }
 
-    private static final class DeadLetterReason implements FixedKeyProcessor<String, JsonNode, JsonNode> {
+    record Translation<T>(JsonNode change, KeyValue<String, T> event, String failure) {
 
-        private final String reason;
-        private FixedKeyProcessorContext<String, JsonNode> context;
-
-        DeadLetterReason(String reason) {
-            this.reason = reason;
+        static <T> Translation<T> of(JsonNode change, Function<JsonNode, KeyValue<String, T>> translation) {
+            try {
+                return new Translation<>(change, translation.apply(change), null);
+            } catch (RuntimeException e) {
+                return new Translation<>(change, null, String.valueOf(e.getMessage()));
+            }
         }
+    }
+
+    private static final class DeadLetter<T> implements FixedKeyProcessor<String, Translation<T>, JsonNode> {
+
+        private FixedKeyProcessorContext<String, JsonNode> context;
 
         @Override
         public void init(FixedKeyProcessorContext<String, JsonNode> context) {
@@ -140,13 +154,12 @@ class TranslationTopology {
         }
 
         @Override
-        public void process(FixedKeyRecord<String, JsonNode> record) {
-            String type = LegacyRow.text(record.value().get("after"), "MOV_TIP");
-            log.warn("Dead-lettering movement {}: {} '{}'",
-                    LegacyRow.number(record.value().get("after"), "MOV_NUM"), reason, type);
+        public void process(FixedKeyRecord<String, Translation<T>> record) {
+            log.warn("Dead-lettering change {} from {}: {}", record.key(),
+                    record.value().change().path("source").path("table").asText("?"), record.value().failure());
             var headers = new RecordHeaders(record.headers().toArray())
-                    .add(DLQ_REASON_HEADER, (reason + ": " + type).getBytes(StandardCharsets.UTF_8));
-            context.forward(record.withHeaders(headers));
+                    .add(DLQ_REASON_HEADER, record.value().failure().getBytes(StandardCharsets.UTF_8));
+            context.forward(record.withValue(record.value().change()).withHeaders(headers));
         }
     }
 }

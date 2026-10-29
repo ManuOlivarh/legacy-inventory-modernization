@@ -34,6 +34,7 @@ EOS only covers Kafka to Kafka inside the translator. CDC is at least once,
 so a duplicated raw row still becomes a duplicated event, and anything that
 writes to a database needs to be idempotent (`movementId`, `sourceLsn`).
 
-Movements with an unknown type go to `inventory.translator.dlq` inside the
-same transaction. Other bad rows (for example an unparseable decimal) still
-stop the stream thread.
+A row that can't be translated (unknown movement type, missing or unparseable
+decimal, a decimal with more than 2 places) goes to `inventory.translator.dlq`
+inside the same transaction, with the reason in a header. The DLQ value is
+the change event re-serialized from JSON, not the original bytes.

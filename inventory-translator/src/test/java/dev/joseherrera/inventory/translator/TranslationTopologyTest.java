@@ -134,6 +134,33 @@ class TranslationTopologyTest {
     }
 
     @Test
+    void rowsThatCannotBeTranslatedAreDeadLetteredAndTheStreamKeepsGoing() {
+        stockIn.pipeInput(null, stock("abc", "0.00"));
+        stockIn.pipeInput(null, stock("1.005", "0.00"));
+        var missingQuantity = movement("VT", "1.00");
+        ((com.fasterxml.jackson.databind.node.ObjectNode) missingQuantity.get("after")).remove("MOV_CAN");
+        movementsIn.pipeInput(null, missingQuantity);
+        stockIn.pipeInput(null, stock("42.00", "5.00"));
+        movementsIn.pipeInput(null, movement("VT", "1.00"));
+
+        assertThat(levelsOut.readValuesToList()).hasSize(1);
+        assertThat(movementsOut.readValuesToList()).hasSize(1);
+        assertThat(deadLetters.readRecordsToList())
+                .extracting(record -> new String(record.headers().lastHeader(TranslationTopology.DLQ_REASON_HEADER).value(),
+                        java.nio.charset.StandardCharsets.UTF_8))
+                .containsExactly("invalid STK_EXI: 'abc'", "invalid STK_EXI: '1.005'", "missing MOV_CAN");
+    }
+
+    @Test
+    void decimalsAreNormalisedToTheContractScale() {
+        stockIn.pipeInput(null, stock("42", "5.5"));
+
+        var level = levelsOut.readValue();
+        assertThat(level.getOnHand().scale()).isEqualTo(2);
+        assertThat(level.getAvailable()).isEqualByComparingTo(new BigDecimal("36.50"));
+    }
+
+    @Test
     void deletesAndTombstonesAreIgnored() {
         var tombstone = json.createObjectNode();
         tombstone.putNull("after");

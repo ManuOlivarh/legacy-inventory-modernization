@@ -1,6 +1,7 @@
 package dev.joseherrera.inventory.translator;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -10,6 +11,8 @@ import java.util.concurrent.TimeUnit;
 import com.fasterxml.jackson.databind.JsonNode;
 
 final class LegacyRow {
+
+    private static final int CONTRACT_SCALE = 2;
 
     private LegacyRow() {
     }
@@ -21,7 +24,14 @@ final class LegacyRow {
 
     static BigDecimal decimal(JsonNode row, String column) {
         String value = text(row, column);
-        return value == null ? BigDecimal.ZERO : new BigDecimal(value);
+        if (value == null) {
+            throw new IllegalArgumentException("missing " + column);
+        }
+        try {
+            return new BigDecimal(value).setScale(CONTRACT_SCALE, RoundingMode.UNNECESSARY);
+        } catch (NumberFormatException | ArithmeticException e) {
+            throw new IllegalArgumentException("invalid " + column + ": '" + value + "'", e);
+        }
     }
 
     static long number(JsonNode row, String column) {

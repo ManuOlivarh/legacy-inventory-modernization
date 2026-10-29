@@ -20,15 +20,21 @@ ERP time of the oldest value in the answer, so a client can see how fresh it is.
 
 ### Idempotency
 
-The upsert only applies if the event isn't older than what's stored:
+The upsert applies when the event has a newer LSN, or the same LSN with
+different values:
 
 ```sql
-WHERE excluded.source_lsn >= stock_level.source_lsn
+WHERE excluded.source_lsn > stock_level.source_lsn
+   OR (excluded.source_lsn = stock_level.source_lsn
+       AND (excluded.on_hand, excluded.reserved, excluded.changed_at)
+           IS DISTINCT FROM (stock_level.on_hand, stock_level.reserved, stock_level.changed_at))
 ```
 
-It's `>=` because two updates to the same row in one ERP transaction share a
-commit LSN, and the second one still has to apply. LSNs are fixed-width hex,
-so comparing them as text gives log order.
+Two updates to the same row in one ERP transaction share a commit LSN, and
+the second one has to apply. An exact redelivery doesn't: at first it was a
+plain `>=`, and every redelivered event was rewritten and counted again in the
+freshness histogram with its old age. LSNs are fixed-width hex, so comparing
+them as text gives log order.
 
 ### Errors
 
